@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CID Cross-Domain Test</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; padding: 32px 16px; }
+    h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .subtitle { color: #94a3b8; font-size: 14px; margin-bottom: 32px; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+    .card { background: #1e2330; border-radius: 12px; padding: 20px; border: 1px solid #2d3348; }
+    .card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: #64748b; margin-bottom: 12px; }
+
+    .cid-box { background: #0f1117; border-radius: 8px; padding: 12px 14px; font-family: monospace; font-size: 13px; color: #a5f3fc; border: 1px solid #1e3a4a; min-height: 42px; display: flex; align-items: center; word-break: break-all; }
+    .cid-box.pending { color: #475569; font-style: italic; }
+    .cid-box.success { color: #4ade80; border-color: #14532d; }
+    .cid-box.error   { color: #f87171; border-color: #7f1d1d; }
+
+    .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; margin-top: 10px; }
+    .badge.ok      { background: #14532d; color: #4ade80; }
+    .badge.fail    { background: #7f1d1d; color: #f87171; }
+    .badge.pending { background: #1e3a4a; color: #94a3b8; }
+
+    .match-banner { border-radius: 12px; padding: 20px 24px; font-size: 16px; font-weight: 700; text-align: center; margin-bottom: 24px; transition: all .3s; }
+    .match-banner.pending { background: #1e2330; color: #64748b; border: 1px solid #2d3348; }
+    .match-banner.match   { background: #14532d; color: #4ade80; border: 1px solid #166534; }
+    .match-banner.nomatch { background: #7f1d1d; color: #f87171; border: 1px solid #991b1b; }
+
+    .log-area { background: #1e2330; border-radius: 12px; border: 1px solid #2d3348; padding: 16px; }
+    .log-area-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: #64748b; margin-bottom: 12px; }
+    .log-list { list-style: none; display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+    .log-item { font-family: monospace; font-size: 12px; padding: 7px 10px; border-radius: 6px; border-left: 3px solid transparent; }
+    .log-item.info    { background: #0f1117; color: #94a3b8; border-color: #334155; }
+    .log-item.success { background: #0d1f17; color: #4ade80; border-color: #166534; }
+    .log-item.error   { background: #1c0a0a; color: #f87171; border-color: #991b1b; }
+    .log-item.warn    { background: #1c150a; color: #fbbf24; border-color: #92400e; }
+
+    .actions { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+    button { padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: opacity .15s; }
+    button:hover { opacity: .85; }
+    .btn-run     { background: #3b82f6; color: white; }
+    .btn-clear   { background: #374151; color: #e2e8f0; }
+    .btn-cic     { background: #8b5cf6; color: white; }
+
+    .elapsed { font-size: 11px; color: #64748b; margin-top: 6px; }
+
+    .instructions { background: #1e2330; border-radius: 12px; padding: 20px; border: 1px solid #2d3348; margin-bottom: 24px; font-size: 13px; color: #94a3b8; line-height: 1.7; }
+    .instructions strong { color: #e2e8f0; }
+    .instructions code { background: #0f1117; padding: 2px 6px; border-radius: 4px; font-family: monospace; color: #a5f3fc; }
+  </style>
+</head>
+<body>
+
+<h1>CID Cross-Domain Test</h1>
+<p class="subtitle">Vercel ↔ central.cic.kz ↔ cic.kz — do they all share the same UUID?</p>
+
+<div class="instructions">
+  <strong>How to use:</strong><br>
+  1. Click <strong>Run Test</strong> — this page requests a CID from <code>central.cic.kz</code> via iframe.<br>
+  2. Then open <strong>cic.kz</strong> in another tab, let it load, and note its CID from DevTools → Storage → Cookies → <code>central_cid</code>.<br>
+  3. Click <strong>Check cic.kz Cookie Match</strong> — paste the CID from cic.kz when prompted.<br>
+  4. If both UUIDs are identical → cross-domain sharing works ✅
+</div>
+
+<div class="actions">
+  <button class="btn-run"   onclick="runTest()">▶ Run Test</button>
+  <button class="btn-clear" onclick="clearAll()">🗑 Clear Storage &amp; Re-run</button>
+  <button class="btn-cic"   onclick="checkCicKz()">🔗 Check cic.kz Cookie Match</button>
+</div>
+
+<div id="matchBanner" class="match-banner pending">Waiting for test…</div>
+
+<div class="grid">
+  <!-- This page -->
+  <div class="card">
+    <div class="card-title">This Page (Vercel)</div>
+    <div class="card-title" style="margin-top:10px">LOCALSTORAGE</div>
+    <div class="cid-box pending" id="ls">—</div>
+    <div class="card-title" style="margin-top:12px">COOKIE</div>
+    <div class="cid-box pending" id="ck">—</div>
+    <div class="card-title" style="margin-top:12px">FROM IFRAME (central.cic.kz)</div>
+    <div class="cid-box pending" id="ifr">—</div>
+    <div id="elapsed" class="elapsed"></div>
+  </div>
+
+  <!-- cic.kz comparison -->
+  <div class="card">
+    <div class="card-title">cic.kz (manual check)</div>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px;line-height:1.6">
+      Open <strong>cic.kz</strong> in another tab → DevTools → Storage → Cookies →
+      find <code>central_cid</code> → copy its value → click
+      <strong>"Check cic.kz Cookie Match"</strong> above.
+    </p>
+    <div class="card-title">CIC.KZ CID (pasted)</div>
+    <div class="cid-box pending" id="cicCid">—</div>
+    <div id="cicMatch"></div>
+  </div>
+</div>
+
+<div class="log-area">
+  <div class="log-area-title">Event Log</div>
+  <ul class="log-list" id="logList"></ul>
+</div>
+
+<script>
+  const CENTRAL_ORIGIN = 'https://central.cic.kz';
+  const CENTRAL_URL    = CENTRAL_ORIGIN + '/index.html';
+  const MAX_WAIT_MS    = 5000;
+
+  let resolvedCid   = null;
+  let iframeStartMs = null;
+
+  /* ── helpers ── */
+  function getCookie(n) {
+    const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + n + '=([^;]+)'));
+    return m ? m[1] : null;
+  }
+  function setCookie(n, v) {
+    document.cookie = `${n}=${v}; Path=/; SameSite=None; Secure; Max-Age=${60*60*24*365}`;
+  }
+
+  function log(msg, type = 'info') {
+    const li = document.createElement('li');
+    li.className = 'log-item ' + type;
+    li.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    const list = document.getElementById('logList');
+    list.appendChild(li);
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function setBox(id, value, state) {
+    const el = document.getElementById(id);
+    el.textContent = value;
+    el.className = 'cid-box ' + state;
+  }
+
+  function setBanner(state, text) {
+    const el = document.getElementById('matchBanner');
+    el.className = 'match-banner ' + state;
+    el.textContent = text;
+  }
+
+  /* ── message listener — registered synchronously ── */
+  let _resolve = null;
+  window.addEventListener('message', function (e) {
+    if (e.origin !== CENTRAL_ORIGIN) return;
+    if (!e.data || e.data.type !== 'central_cid' || !e.data.value) return;
+
+    const elapsed = Date.now() - iframeStartMs;
+    log(`✓ Received CID from central.cic.kz in ${elapsed}ms`, 'success');
+    document.getElementById('elapsed').textContent = `Elapsed: ${elapsed}ms`;
+
+    if (_resolve) {
+      const fn = _resolve;
+      _resolve = null;
+      fn(e.data.value);
+    }
+  });
+
+  /* ── main test ── */
+  async function runTest() {
+    log('Starting test…', 'info');
+    setBanner('pending', 'Running…');
+    setBox('ls',  '—', 'pending');
+    setBox('ck',  '—', 'pending');
+    setBox('ifr', '—', 'pending');
+    document.getElementById('elapsed').textContent = '';
+
+    // 1. Check localStorage
+    const fromLs = localStorage.getItem('central_cid');
+    if (fromLs) {
+      log(`Found CID in localStorage: ${fromLs}`, 'success');
+      setBox('ls', fromLs, 'success');
+    } else {
+      log('No CID in localStorage', 'info');
+      setBox('ls', 'empty', 'pending');
+    }
+
+    // 2. Check cookie
+    const fromCk = getCookie('central_cid');
+    if (fromCk) {
+      log(`Found CID in cookie: ${fromCk}`, 'success');
+      setBox('ck', fromCk, 'success');
+    } else {
+      log('No CID in cookie (expected on first run or HTTP)', 'warn');
+      setBox('ck', 'empty — normal on first run', 'pending');
+    }
+
+    // 3. Request from central.cic.kz via iframe
+    log('Opening hidden iframe → central.cic.kz…', 'info');
+    iframeStartMs = Date.now();
+
+    const cid = await new Promise(function (resolve) {
+      _resolve = resolve;
+
+      const ifr = document.createElement('iframe');
+      ifr.style.cssText = 'display:none;width:0;height:0;border:0;position:absolute;';
+      ifr.src = `${CENTRAL_URL}?mode=embed&post_origin=${encodeURIComponent(location.origin)}`;
+
+      const timer = setTimeout(function () {
+        if (!_resolve) return;
+        _resolve = null;
+        ifr.parentNode && ifr.parentNode.removeChild(ifr);
+        log('TIMEOUT — central.cic.kz did not respond within 5s', 'error');
+        log('Check: is this Vercel URL in ALLOWED_ORIGINS on central.cic.kz?', 'warn');
+        resolve(null);
+      }, MAX_WAIT_MS);
+
+      ifr.addEventListener('load', function () {
+        if (!_resolve) return;
+        log('iframe loaded — sending get_central_cid request…', 'info');
+        setTimeout(function () {
+          try {
+            ifr.contentWindow.postMessage({ type: 'get_central_cid' }, CENTRAL_ORIGIN);
+          } catch (err) {
+            log('postMessage failed: ' + err.message, 'error');
+          }
+        }, 50);
+      });
+
+      document.body.appendChild(ifr);
+    });
+
+    if (!cid) {
+      setBox('ifr', 'NO RESPONSE — see log', 'error');
+      setBanner('nomatch', '✗ FAIL — central.cic.kz did not respond');
+      return;
+    }
+
+    resolvedCid = cid;
+    setBox('ifr', cid, 'success');
+
+    // Persist
+    try { localStorage.setItem('central_cid', cid); } catch (_) {}
+    setCookie('central_cid', cid);
+
+    // Refresh storage display
+    setBox('ls', localStorage.getItem('central_cid') || 'saved', 'success');
+    setBox('ck', getCookie('central_cid') || 'saved (check DevTools)', 'success');
+
+    log(`✓ CID resolved and saved: ${cid}`, 'success');
+    setBanner('match', '✓ CID received from central.cic.kz — now check cic.kz');
+  }
+
+  /* ── compare with cic.kz ── */
+  function checkCicKz() {
+    const input = prompt(
+      'Open cic.kz in another tab.\n' +
+      'DevTools → Storage → Cookies → central_cid\n\n' +
+      'Paste the value here:'
+    );
+    if (!input) return;
+
+    const pasted = input.trim();
+    document.getElementById('cicCid').textContent = pasted;
+    document.getElementById('cicCid').className = 'cid-box';
+
+    const matchEl = document.getElementById('cicMatch');
+
+    if (!resolvedCid) {
+      matchEl.innerHTML = '<span class="badge fail">✗ Run test first</span>';
+      log('Run the test first before comparing', 'warn');
+      return;
+    }
+
+    if (pasted === resolvedCid) {
+      matchEl.innerHTML = '<span class="badge ok">✓ MATCH — same CID across domains!</span>';
+      setBanner('match', '✓ MATCH — cic.kz and Vercel share the same CID');
+      log(`✓ MATCH! Both sites have CID: ${pasted}`, 'success');
+    } else {
+      matchEl.innerHTML = '<span class="badge fail">✗ MISMATCH</span>';
+      setBanner('nomatch', '✗ MISMATCH — CIDs differ between domains');
+      log(`✗ MISMATCH: Vercel="${resolvedCid}" | cic.kz="${pasted}"`, 'error');
+      log('Possible cause: cic.kz has a cached old CID in its localStorage', 'warn');
+      log('Fix: clear cic.kz localStorage in DevTools and reload', 'warn');
+    }
+  }
+
+  /* ── clear and re-run ── */
+  function clearAll() {
+    try { localStorage.removeItem('central_cid'); } catch (_) {}
+    document.cookie = 'central_cid=; Path=/; Max-Age=0';
+    resolvedCid = null;
+    document.getElementById('logList').innerHTML = '';
+    document.getElementById('cicCid').textContent = '—';
+    document.getElementById('cicCid').className = 'cid-box pending';
+    document.getElementById('cicMatch').innerHTML = '';
+    log('Storage cleared — running fresh test…', 'warn');
+    runTest();
+  }
+
+  /* ── auto-run on load ── */
+  window.addEventListener('load', runTest);
+</script>
+
+</body>
+</html>
